@@ -1,0 +1,107 @@
+# CI：PR 与 master push 自动跑离线回归（合成 OCR，不读屏、不调 API、不读凭据）。
+# 测试导入 Quartz（pyobjc），必须 macOS runner；本仓库公开，macOS runner 免费不计费。
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  # 合并队列：对「队列批量合并结果」跑同一套检查（PR 自身的 pull_request CI 照旧，
+  # pullfrog 自动评审挂在那条上不受影响）；增量门禁仅 pull_request，队列跑不到、也不该跑
+  merge_group:
+    types: [checks_requested]
+
+# 同一分支的新 run 取消同 ref 的旧 run，省排队时间
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: 离线回归 (unittest)
+    runs-on: macos-latest
+    # 本地实测全套 <2s，超时给的是冷缓存装依赖（torch 较大）的余量
+    timeout-minutes: 15
+    steps:
+      # 完整历史：PR 上的增量覆盖率门禁需要 origin/main 做对比基线（浅克隆没有它）
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      # 纯文档改动（docs/、根目录 *.md、LICENSE、.gitignore）跳过测试但照常报绿——
+      # required check 永远有结果且是 success（不是 skipped），分支保护和合并队列都
+      # 不会因为「check 没出现/没过」卡死。不能用触发器级 paths 过滤：那会让
+      # required check 根本不产生。
+      # pull_request 与合并队列（merge_group）都做判定：队列上 origin/main...HEAD
+      # 恰好就是本批 PR 的全部改动，纯文档批同样秒过；master push 一律全量。
+      - name: 是否纯文档改动
+        id: changes
+        run: |
+          case "${{ github.event_name }}" in
+            pull_request|merge_group) ;;
+            *) echo "docs_only=false" >> "$GITHUB_OUTPUT"; exit 0;;
+          esac
+          FILES="$(git diff --name-only "origin/main...HEAD")"
+          echo "改动文件："; echo "${FILES:-（空，默认全量跑）}"
+          if [ -n "$FILES" ] && ! echo "$FILES" | grep -qvE '^(docs/|[^/]+\.(md|rst|txt)$|LICENSE|\.gitignore$)'; then
+            echo "纯文档改动 → 跳过测试，直接报绿"
+            echo "docs_only=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # 注：setup-uv 自 v8 起不再发布 @v8 这类 major tag，须 pin 完整版本号
+      - name: Install uv
+        if: steps.changes.outputs.docs_only != 'true'
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          enable-cache: true
+
+      # 覆盖率基线棘轮：ci/coverage-min.txt 只许人工上调、原则上不下调，跌破即红。
+      # 首次基线 44 = 2026-09-24 实测 src 口径 45%（5102 语句，排除自测脚本）留 ~1pt
+      # 缓冲吸收平台抖动；覆盖率涨了就随同一个 PR 上调门槛文件，把增量焊死。
+      # coverage/diff-cover 临时注入（uv --with），不动 pyproject.toml。
+      - name: 离线回归（覆盖率统计 + 基线门禁）
+        if: steps.changes.outputs.docs_only != 'true'
+        run: |
+          set -o pipefail
+          uv run --locked --with coverage coverage run --source=src -m unittest discover -s tests
+          uv run --locked --with coverage coverage report \
+            --omit=src/judge_zh_test.py \
+            --fail-under="$(cat ci/coverage-min.txt)"
+          uv run --locked --with coverage coverage xml --omit=src/judge_zh_test.py -o coverage.xml
+
+      # 基线棘轮的机械保证（仅 PR）：基线相对 origin/main 只许持平或上调，下调即红
+      # ——「只升不降」不靠 review 自觉。确需下调（如移除大模块）在 PR 里说明理由，
+      # 维护者特批。基线文件在 origin/main 尚不存在时（首个引入 PR）视为 0 放行。
+      - name: 基线棘轮（coverage-min 只许升，仅 PR）
+        if: github.event_name == 'pull_request' && steps.changes.outputs.docs_only != 'true'
+        run: |
+          LOCAL="$(tr -d '[:space:]' < ci/coverage-min.txt)"
+          BASE="$(git show origin/main:ci/coverage-min.txt 2>/dev/null | tr -d '[:space:]')"
+          # git show 失败（origin/main 尚无基线文件，首个引入 PR）视为 0；
+          # 注意兜底不能写成 `|| echo 0`——那绑在管道末端的 tr 上，失败时 BASE 为空
+          [ -n "$BASE" ] || BASE=0
+          if [ -z "$LOCAL" ]; then
+            echo "::error::ci/coverage-min.txt 为空或缺失——基线棘轮无法判定"
+            exit 1
+          fi
+          echo "覆盖率基线：本 PR=${LOCAL}  origin/main=${BASE}"
+          if [ "$LOCAL" -lt "$BASE" ]; then
+            echo "::error::覆盖率基线从 ${BASE} 下调到 ${LOCAL}——棘轮只许升不许降；确需下调请在 PR 描述说明理由，交维护者特批"
+            exit 1
+          fi
+
+      # 增量覆盖率门禁（仅 PR）：相对 origin/main 的改动/新增行 ≥80% 须被测试触达，
+      # 存量零追缴（存量由上面的全局基线管，这里只管增量）。master push 无增量语义，
+      # 跳过；diff 里无 Python 改动时直接绿，纯 CI/文档 PR 不误伤。
+      - name: 增量覆盖率门禁（改动行 ≥80%，仅 PR）
+        if: github.event_name == 'pull_request' && steps.changes.outputs.docs_only != 'true'
+        # pipefail：门禁退出码不许被吞，红就是红
+        run: |
+          set -o pipefail
+          uv run --locked --with diff-cover diff-cover coverage.xml --compare-branch origin/main --fail-under=80

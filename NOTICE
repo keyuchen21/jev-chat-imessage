@@ -1,0 +1,15 @@
+jev-chat-imessage (Jev chat copilot for macOS Messages)
+Copyright © 2026 eatmoreduck and jev-chat contributors
+
+Licensed under the MIT License (see LICENSE).
+
+Derived from jev-chat-jarvis-mac (https://github.com/jev-chat/jev-chat-jarvis-mac).
+When you redistribute or use this commercially, keep this file and LICENSE, and credit
+the source on your About page, docs or release page, for example:
+
+    Based on jev-chat-imessage (https://github.com/jev-chat/jev-chat-imessage)
+
+Do not use the names "Jev 聊天助手" / "jev-chat" or the jev-jarvis.com domain to imply
+that your product comes from or is endorsed by the original authors.
+
+This is an independent open-source project. It is not affiliated with Apple Inc.
