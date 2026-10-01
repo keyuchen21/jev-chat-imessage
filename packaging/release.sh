@@ -124,14 +124,18 @@ if [ "$PUBLISH" = 1 ]; then
     fi
     NOTES="$TMP/notes.md"
     {
-        echo "需要 **macOS 13+**。下载即用：解压后把 \`jev-imessage.app\` 拖进「应用程序」。"
+        echo "Copilot panel for **Messages.app on macOS** (iMessage / SMS). Apple Silicon only. It never sends: you press Return yourself."
         echo
-        echo "**第一次打开**：右键（或按住 Control 点）→ 打开 → 再点「打开」。未做 Apple 公证，双击会被 Gatekeeper 拦，只需这一次。"
-        echo "若弹「**已损坏，无法打开**」（浏览器下载常见，右键无效）：终端执行 \`sudo xattr -r -d com.apple.quarantine /Applications/jev-imessage.app\` 后再打开。"
-        echo "**第一次启动**：联网装依赖（uv 缓存命中就很快）；只需给 \`jev-imessage\` 授予「屏幕录制」权限，然后退出重开，无需单独授权 \`python3.12\`。"
-        echo "**判断层默认跑本地模型，首次要下载约 3.8 GB**（之后离线可用）。不想下载：在 \`~/.config/jev-imessage/env\` 里给判断层配一个 key 走云端，见 README「配置」。"
+        echo "**Install**: unzip, drag \`jev-imessage.app\` into Applications."
         echo
-        echo "### 本次包含"
+        echo "**First open**: right-click (or Control-click) → Open → Open. The app is not notarized, so a double-click is blocked once by Gatekeeper."
+        echo "If macOS says the app **is damaged and can't be opened** (common for browser downloads), run \`sudo xattr -r -d com.apple.quarantine /Applications/jev-imessage.app\` in Terminal, then open it again."
+        echo
+        echo "**First launch**: it installs its Python dependencies (needs the network once). Grant **Accessibility** to \`jev-imessage\` (System Settings › Privacy & Security › Accessibility). Screen Recording is not needed."
+        echo
+        echo "**Models**: replies work out of the box through the built-in shared channel (plain HTTP relay; see PRIVACY.md) or your own OpenAI/Anthropic-compatible key. For intent and risk, add a Jev key (for example via OpenRouter) or choose the offline judge model (about 3.8 GB, downloaded only if you choose it). Config: \`~/.config/jev-imessage/env\` or the gear icon on the panel."
+        echo
+        echo "### Changes"
         if git -C "$ROOT" rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
             # HEAD 就是刚推的 tag：describe 会返回 tag 自己，从它的父提交往回找上一版
             PREV="$(git -C "$ROOT" describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)"
