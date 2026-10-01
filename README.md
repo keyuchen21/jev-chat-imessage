@@ -32,6 +32,15 @@ uv run python probe/imessage_probe.py --fill hi  # also write "hi" to an empty i
 uv run python src/apps/imessage_app.py           # the adapter's own read
 ```
 
+## Download
+
+[**jev-imessage-macos-latest.zip**](https://github.com/keyuchen21/jev-chat-imessage/releases/latest/download/jev-imessage-macos-latest.zip)
+([all releases](https://github.com/keyuchen21/jev-chat-imessage/releases)). Unzip, drag
+`jev-imessage.app` into Applications, then **right-click → Open** the first time (the app is
+not notarized). If macOS says the app is damaged:
+`sudo xattr -r -d com.apple.quarantine /Applications/jev-imessage.app`.
+First launch installs its Python dependencies (network needed once).
+
 ## Requirements
 
 - Apple Silicon Mac. macOS 13+ inherited from the base app; only macOS 27.2 is tested.
